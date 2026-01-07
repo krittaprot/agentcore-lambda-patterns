@@ -1,0 +1,151 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Bedrock AgentCore with API Gateway Response Streaming
+
+Parameters:
+  AgentRuntimeArn:
+    Type: String
+    Description: ARN of the Bedrock AgentCore agent runtime
+    Default: ''
+
+Globals:
+  Api:
+    Cors:
+      AllowMethods: "'GET,POST,OPTIONS'"
+      AllowHeaders: "'content-type'"
+      AllowOrigin: "'*'"
+
+Resources:
+  BedrockAgentCoreStreamingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: bedrock-agentcore-api-streaming
+      CodeUri: .
+      Handler: index.handler
+      Runtime: nodejs20.x
+      Timeout: 900  # 15 minutes (max for streaming)
+      MemorySize: 512
+      Environment:
+        Variables:
+          AGENT_RUNTIME_ARN: !Ref AgentRuntimeArn
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - bedrock-agentcore:InvokeAgentRuntime
+            Resource: !Sub 'arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:runtime/*'
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /invoke
+            Method: post
+            RestApiId: !Ref BedrockAgentCoreApi
+
+  BedrockAgentCoreApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: bedrock-agentcore-streaming-api
+      StageName: Prod
+      DefinitionBody:
+        swagger: '2.0'
+        info:
+          title: Bedrock AgentCore Streaming API
+          version: '1.0'
+        paths:
+          /invoke:
+            post:
+              consumes:
+                - application/json
+              produces:
+                - text/event-stream
+                - application/json
+              parameters:
+                - in: body
+                  name: body
+                  required: true
+                  schema:
+                    type: object
+                    properties:
+                      prompt:
+                        type: string
+                      session_id:
+                        type: string
+                      accept:
+                        type: string
+                        default: text/event-stream
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2021-11-15/functions/${BedrockAgentCoreStreamingFunction.Arn}/response-streaming-invocations'
+                responseTransferMode: STREAM
+                timeoutInMillis: 900000  # 15 minutes
+                credentials: !GetAtt ApiGatewayExecutionRole.Arn
+              responses:
+                '200':
+                  description: Successful streaming response
+                  headers:
+                    Content-Type:
+                      type: string
+                    X-Session-Id:
+                      type: string
+            options:
+              consumes:
+                - application/json
+              produces:
+                - application/json
+              responses:
+                '200':
+                  description: CORS response
+                  headers:
+                    Access-Control-Allow-Origin:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Headers:
+                      type: string
+              x-amazon-apigateway-integration:
+                type: mock
+                requestTemplates:
+                  application/json: '{"statusCode": 200}'
+                responses:
+                  default:
+                    statusCode: '200'
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+                      method.response.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+                      method.response.header.Access-Control-Allow-Origin: "'*'"
+
+  ApiGatewayExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: LambdaInvokePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                  - lambda:InvokeWithResponseStream
+                Resource: !GetAtt BedrockAgentCoreStreamingFunction.Arn
+
+Outputs:
+  BedrockAgentCoreStreamingFunctionArn:
+    Description: ARN of the Lambda function
+    Value: !GetAtt BedrockAgentCoreStreamingFunction.Arn
+
+  ApiGatewayUrl:
+    Description: API Gateway endpoint URL for streaming
+    Value: !Sub 'https://${BedrockAgentCoreApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/invoke'
+
+  ApiGatewayId:
+    Description: API Gateway ID
+    Value: !Ref BedrockAgentCoreApi

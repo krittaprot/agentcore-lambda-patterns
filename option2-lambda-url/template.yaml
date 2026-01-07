@@ -1,0 +1,41 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Bedrock AgentCore Lambda Streaming Function URL
+
+Parameters:
+  AgentRuntimeArn:
+    Type: String
+    Description: ARN of the Bedrock AgentCore agent runtime
+    Default: ''
+
+Resources:
+  BedrockAgentCoreStreamingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: bedrock-agentcore-streaming
+      CodeUri: .
+      Handler: index.handler
+      Runtime: nodejs20.x
+      Timeout: 120
+      MemorySize: 512
+      Environment:
+        Variables:
+          AGENT_RUNTIME_ARN: !Ref AgentRuntimeArn
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - bedrock-agentcore:InvokeAgentRuntime
+            Resource: !Sub 'arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:runtime/*'
+      FunctionUrlConfig:
+        AuthType: NONE
+        InvokeMode: RESPONSE_STREAM
+
+Outputs:
+  BedrockAgentCoreStreamingFunctionArn:
+    Description: ARN of the Lambda function
+    Value: !GetAtt BedrockAgentCoreStreamingFunction.Arn
+
+  FunctionUrl:
+    Description: Lambda Function URL (streaming)
+    Value: !GetAtt BedrockAgentCoreStreamingFunctionUrl.FunctionUrl

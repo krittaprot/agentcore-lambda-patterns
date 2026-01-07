@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Bedrock AgentCore Lambda Function
+
+Parameters:
+  AgentRuntimeArn:
+    Type: String
+    Description: ARN of the Bedrock AgentCore agent runtime
+    Default: ''
+
+Resources:
+  BedrockAgentCoreFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: bedrock-agentcore-invoke
+      CodeUri: .
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.11
+      Timeout: 120
+      MemorySize: 512
+      Environment:
+        Variables:
+          AGENT_RUNTIME_ARN: !Ref AgentRuntimeArn
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - bedrock-agentcore:InvokeAgentRuntime
+            Resource: !Sub 'arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:runtime/*'
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /invoke
+            Method: post
+
+Outputs:
+  BedrockAgentCoreFunctionArn:
+    Description: ARN of the Lambda function
+    Value: !GetAtt BedrockAgentCoreFunction.Arn
+
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/invoke'
