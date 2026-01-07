@@ -1,5 +1,7 @@
 # AWS Lambda Patterns for Amazon Bedrock AgentCore Runtime
 
+![streaming-output-gid](https://github.com/user-attachments/assets/5af0e138-47f8-4938-85e7-50f69bef2939)
+
 This repository contains two runnable AWS Lambda implementations for invoking Amazon Bedrock AgentCore Runtime agents, plus guidance for a third configuration that uses API Gateway (REST) response streaming.
 
 Use these patterns when you want a client-facing API boundary and **don’t want to expose the AgentCore Runtime endpoint directly** (for example: clients can’t sign SigV4 requests, you need managed auth/throttling/WAF, or you need to normalize request headers/payloads).
